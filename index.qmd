@@ -7,7 +7,7 @@ execute:
   message: false
 ---
 
-The following creates a hexagonal grid covering Tampa Bay.  The grid size is 7500 feet between opposing edges of each hexagon. The output is saved as a KML file in the [data folder](https://github.com/tbep-tech/tb-hex/tree/main/data){target="_blank"}. 
+The following creates a hexagonal grid covering Tampa Bay.  The grid size is 4300 feet between opposing edges of each hexagon. The output is saved as a KML file in the [data folder](https://github.com/tbep-tech/tb-hex/tree/main/data){target="_blank"}. 
 
 ```{r}
 library(sf)
@@ -20,13 +20,13 @@ load(url('https://github.com/tbep-tech/benthic-dash/raw/main/data/segs.RData'))
 segs <- st_transform(segs, crs = 6443)
 
 # make the grid, defined by bounding box of segs
-tbhex <- st_make_grid(segs, cellsize = 7500, what = "polygons", square = F)
+tbhex <- st_make_grid(segs, cellsize = 4300, what = "polygons", square = F)
 
 # subset to tb segments
 tbhex <- st_as_sf(tbhex)[segs, ]
 
 # plot
-mapview(segs) + mapview(tbhex, col.regions = NA)
+mapview(segs, legend = F) + mapview(tbhex, alpha.regions = 0, legend = F)
 
 # save to data folder
 st_write(tbhex, 'data/tbhex.KML', driver = 'KML', delete_layer = T, quiet = T)
