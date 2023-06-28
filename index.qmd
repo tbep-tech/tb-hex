@@ -1,0 +1,34 @@
+---
+title: "Create grid"
+format: html
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+The following creates a hexagonal grid covering Tampa Bay.  The grid size is 7500 feet between opposing edges of each hexagon. The output is saved as a KML file in the data folder. 
+
+```{r}
+library(sf)
+library(mapview)
+
+# janky layer I made for all bay segments 
+load(url('https://github.com/tbep-tech/benthic-dash/raw/main/data/segs.RData'))
+
+# project, units in feet
+segs <- st_transform(segs, crs = 6443)
+
+# make the grid, defined by bounding box of segs
+tbhex <- st_make_grid(segs, cellsize = 7500, what = "polygons", square = F)
+
+# subset to tb segments
+tbhex <- st_as_sf(tbhex)[segs, ]
+
+# plot
+mapview(segs) + mapview(tbhex, col.regions = NA)
+
+# save to data folder
+st_write(tbhex, 'data/tbhex.KML', driver = 'KML', delete_layer = T, quiet = T)
+```
+
