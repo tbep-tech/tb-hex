@@ -7,7 +7,7 @@ execute:
   message: false
 ---
 
-The following creates a hexagonal grid covering Tampa Bay.  The grid size is 7500 feet between opposing edges of each hexagon. The output is saved as a KML file in the data folder. 
+The following creates a hexagonal grid covering Tampa Bay.  The grid size is 7500 feet between opposing edges of each hexagon. The output is saved as a KML file in the [data folder](https://github.com/tbep-tech/tb-hex/tree/main/data){target="_blank"}. 
 
 ```{r}
 library(sf)
