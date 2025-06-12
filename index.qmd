@@ -7,12 +7,21 @@ execute:
   message: false
 ---
 
-The following creates a hexagonal grid covering Tampa Bay.  The grid size is 4300 feet between opposing edges of each hexagon. The output is saved as a KML file in the [data folder](https://github.com/tbep-tech/tb-hex/tree/main/data){target="_blank"}. 
-
-```{r}
+```{r setup}
 library(sf)
 library(mapview)
+library(leaflet)
+library(mapedit)
+library(here)
+library(spsurvey)
+library(dplyr)
+```
 
+### Whole Bay
+
+The following creates a hexagonal grid covering Tampa Bay. The grid size is 4300 feet between opposing edges of each hexagon. The output is saved as a KML file in the [data folder](https://github.com/tbep-tech/tb-hex/tree/main/data){target="_blank"}.
+
+```{r}
 # janky layer I made for all bay segments 
 load(url('https://github.com/tbep-tech/benthic-dash/raw/main/data/segs.RData'))
 
@@ -29,6 +38,147 @@ tbhex <- st_as_sf(tbhex)[segs, ]
 mapview(segs, legend = F) + mapview(tbhex, alpha.regions = 0, legend = F)
 
 # save to data folder
-st_write(tbhex, 'data/tbhex.KML', driver = 'KML', delete_layer = T, quiet = T)
+st_write(tbhex, here('data/tbhex.KML'), driver = 'KML', delete_layer = T, quiet = T)
+```
+
+### Little Manatee River and Braden River 
+
+Next, separate grids are made for the Little Manatee River and Braden River.  First, each area must be manually subset to the area of interest. Then, the hexagonal grid is created using the same `st_make_grid` function.
+
+
+```{r, eval = F}
+# done interactively and is not included in the final document
+data(tbsegdetail, package = 'tbeptools')
+
+m <- leaflet() |> 
+ addProviderTiles('CartoDB.Positron') |> 
+ addPolygons(data = tbsegdetail, weight =  0.5)
+
+lmrpoly <- drawFeatures(m)
+
+lmr <- sf::st_intersection(tbsegdetail, lmrpoly) |> 
+  st_geometry()
+
+save(lmr, file = here('data/lmr.RData'))
+
+brpoly <- drawFeatures(m)
+
+br <- sf::st_intersection(tbsegdetail, brpoly) |> 
+  st_geometry()
+
+save(br, file = here('data/br.RData'))
+```
+
+Reload the subset areas for the Little Manatee River and Braden River.  Create separate hex grids for each area.  Use the hex size from existing Manatee River hexagons.
+
+```{r}
+load(file = here('data/lmr.RData'))
+load(file = here('data/br.RData'))
+
+lmr <- st_transform(lmr, crs = 6443)
+br <- st_transform(br, crs = 6443)
+
+# # use draw feature to get distance of MR hex from side to side
+# # compare with cellsize at 4300
+# mrhex <- st_read(here('data-raw/mbenhex.shp'), quiet = T) |> 
+#   st_transform(crs = 6443)
+# drawFeatures(mapview(mr) + mapview(br))
+# 4300 / 1.3 = x / 1.45
+# x = 4800
+
+# make the lmr grid, defined by bounding box of lmr
+lmrhex <- st_make_grid(lmr, cellsize = 4800, what = "polygons", square = F)
+lmrhex <- st_as_sf(lmrhex[lmr, ])
+
+# make the br grid, defined by the bounding box of br
+brhex <- st_make_grid(br, cellsize = 4800, what = "polygons", square = F)
+brhex <- st_as_sf(brhex[br,])
+```
+
+Now the grids can be shown.
+
+```{r}
+mapview(lmr, legend = F) + mapview(lmrhex, alpha.regions = 0, legend = F) +
+  mapview(br, legend = F) + mapview(brhex, alpha.regions = 0, legend = F)
+```
+
+### Create sample points using Little Manatee River and Braden River grids
+
+The `spsurvey` package is used to create sample grids for the Little Manatee River and Braden River.  However, points must be defined by both the grids and the river polygons so that no points are on land.  The grids are first intersected with the river polygons, then the `grts` function is used to create the points. 
+
+```{r}
+set.seed(123)
+
+nsmp <- 15
+
+# clip hexes to only include lmr areas
+lmr_hexes <- st_intersection(lmrhex, lmr)
+
+# remove any empty geometries and extra columns
+lmr_hexes <- lmr_hexes[!st_is_empty(lmr_hexes), ] 
+  
+# remove any points on the boundaries
+lmr_hexes <- lmr_hexes[!st_geometry_type(lmr_hexes) == 'POINT', ]
+
+# convert to sf
+lmr_hexes <- st_as_sf(data.frame(
+    hexid = 1:length(lmr_hexes),
+    geom = lmr_hexes)
+  )
+
+# add inverse area for weighting since no longer hexes of equal area
+lmr_hexes$weight <- 1 / as.numeric(units::set_units(st_area(lmr_hexes), 'acre'))
+
+# get points using grts, randomly assign 5 as backup
+lmrpts <- grts(
+    sframe = lmr_hexes,
+    n_base = nsmp, 
+    aux_var = 'weight'
+  )$sites_base |> 
+  select(siteID) |> 
+  mutate(
+    backup = sample(c(rep(T, nsmp - 10), rep(F, nsmp - 5)))
+  )
+
+# clip hexes to only include br areas
+br_hexes <- st_intersection(brhex, br) 
+
+# remove any empty geometries and extra columns
+br_hexes <- br_hexes[!st_is_empty(br_hexes),]
+  
+# remove any points on the boundaries
+br_hexes <- br_hexes[!st_geometry_type(br_hexes) == 'POINT', ]
+
+# convert to sf
+br_hexes <- st_as_sf(data.frame(
+    hexid = 1:length(br_hexes),
+    geom = br_hexes)
+  )
+
+# add inverse area for weighting since no longer hexes of equal area
+br_hexes$weight <- 1 / as.numeric(units::set_units(st_area(br_hexes), 'acre'))
+
+# get points using grts, randomly assign 5 as backup
+brpts <- grts(
+    sframe = br_hexes,
+    n_base = nsmp, 
+    aux_var = 'weight'
+  )$sites_base |> 
+  select(siteID) |> 
+  mutate(
+    backup = sample(c(rep(T, nsmp - 10), rep(F, nsmp - 5)))
+  )
+```
+
+### Little Manatee River results
+
+```{r}
+mapview(lmr, legend = F) + mapview(lmrhex, alpha.regions = 0, legend = F) + mapview(lmrpts, zcol = 'backup')
+```
+
+### Braden River results
+
+```{r}
+mapview(br, legend = F) + mapview(brhex, alpha.regions = 0, legend = F) + mapview(brpts, zcol = 'backup')
 ```
 
