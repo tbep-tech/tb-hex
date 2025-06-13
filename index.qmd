@@ -168,6 +168,21 @@ brpts <- grts(
   mutate(
     backup = sample(c(rep(T, nsmp - 10), rep(F, nsmp - 5)))
   )
+
+# save points for both
+lmrptsdf <- lmrpts |> 
+  st_transform(crs = 4326) |> 
+  st_coordinates() |> 
+  as.data.frame() |> 
+  mutate(backup = lmrpts$backup)
+brptsdf <- brpts |> 
+  st_transform(crs = 4326) |> 
+  st_coordinates() |> 
+  as.data.frame() |> 
+  mutate(backup = brpts$backup)
+ptsdf <- rbind(lmrptsdf, brptsdf)
+ptsdf$siteID <- 1:nrow(ptsdf)
+write.csv(ptsdf, here('data/benthic-special-study-2024.csv'), row.names = F)
 ```
 
 ### Little Manatee River results
